@@ -33,9 +33,11 @@ fn get_open_dir() -> PathBuf
 
 fn get_save_dir(open_dir: &PathBuf, extension: &str) -> PathBuf
 {
+    let filename = open_dir.file_stem().unwrap().to_string_lossy();
     FileDialog::new()
         .set_directory(&open_dir)
-        .set_file_name(&open_dir.file_name().unwrap())
+        .set_file_name(&format!("{}Squared", filename))
+        .add_filter("image", &vec![extension])
         .save_file()
         .expect("File saving failed")
 }
