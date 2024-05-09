@@ -1,5 +1,5 @@
-use std::{cmp::min, ffi::OsStr, fmt::format, io, path::PathBuf};
-use image::{self, DynamicImage, GenericImage, GenericImageView, Pixel};
+use std::{cmp::min, ffi::OsStr, io, path::PathBuf};
+use image::{self, DynamicImage, GenericImage, GenericImageView, Rgba, Rgb};
 use rfd::FileDialog;
 
 fn main() 
@@ -15,18 +15,21 @@ fn main()
 
     if image.width()!=image.height()
     {
+        print!("Image not square.");
         make_square(&mut image);
     }
+    else { println!("Image is square");}
     
-    let output_path: PathBuf = get_save_dir(&input_path, extension);
+    let output_image: DynamicImage = image_to_power(&image);
 
-    image.save(output_path).expect("Save failed");
+    let output_path: PathBuf = get_save_dir(&input_path, extension);
+    output_image.save(output_path).expect("Save failed");
 }
 
 fn get_open_dir() -> PathBuf
 {
     FileDialog::new()
-        .add_filter("text", &["png", "jpg","jpeg"])
+        .add_filter("image", &["png", "jpg","jpeg"])
         .pick_file()
         .expect("File selection failed")
 }
@@ -58,12 +61,53 @@ fn make_square(image: &mut DynamicImage)
 
 
 
-fn square(image: &DynamicImage) -> DynamicImage
+fn image_to_power(image: &DynamicImage) -> DynamicImage
 {
     let mut output_img: DynamicImage = image::DynamicImage::new(image.width(), image.height(), image::ColorType::Rgb8);
-    let colour: image::Rgba<u8> = image.get_pixel(0, 0);
-    output_img.put_pixel(0, 0, colour);
-    println!("{:?}", colour);
+    for img1_row in 0..image.height()
+    {
+        println!("1row {}", img1_row);
+        let mut buffer: Vec<image::Rgb<u16>> = vec![];
+        for img2_column in 0..image.width()
+        {
+            println!("  2col {}", img2_column);
+            for img1_column in 0..image.width()
+            {
+                println!("      1col {}", img1_column);
+                let colour1: Rgba<u8>  = image.get_pixel(img1_column, img1_row);
+                
+                let colour2: Rgba<u8> = image.get_pixel(img2_column, img1_column);
+
+                let colour_out: image::Rgb<u16> = Rgb([
+                    (colour1[0] as u16 * colour2[0] as u16), 
+                    (colour1[1] as u16 * colour2[1] as u16), 
+                    (colour1[2] as u16 * colour2[2] as u16)
+                    ]);
+                
+                
+                buffer.push(colour_out);
+            }
+
+            let pixel: Rgb<u32> = 
+            buffer
+                .iter()
+                .fold(
+                    Rgb([0,0,0]), 
+                    |acc: Rgb<u32>, colour: &Rgb<u16>| 
+                        Rgb([acc[0]+colour[0] as u32, 
+                        acc[1]+colour[1] as u32, 
+                        acc[2]+colour[2] as u32]));
+
+            output_img
+                .put_pixel(
+                    img2_column,
+                    img1_row, 
+                    Rgba([pixel[0].clamp(0, 255) as u8, pixel[1].clamp(0, 255) as u8, pixel[2].clamp(0, 255) as u8, 255])
+                );
+            buffer.clear();
+            println!("sent buffer")
+        }
+    }
     return output_img
 }
 
