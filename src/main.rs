@@ -1,5 +1,6 @@
 use std::{cmp::min, ffi::OsStr, io, path::PathBuf};
 use image::{self, DynamicImage, GenericImage, GenericImageView, Rgba, Rgb};
+use num::clamp;
 use rfd::FileDialog;
 
 fn main() 
@@ -58,25 +59,57 @@ fn make_square(image: &mut DynamicImage)
     *image = image.crop_imm(x, y, width, width);
 }
 
+fn get_pix_some_none(x: u16, y: u16, image: &DynamicImage) -> Option<Rgb<u8>>
+{
+    let mut pixel: Rgba<u8> = image.get_pixel(x as u32, y as u32);
+    if pixel[3] == 0 {
+        return None
+    }
+    let source: Vec<f32> = vec![
+        pixel[0] as f32 / 255f32, 
+        pixel[1] as f32 / 255f32, 
+        pixel[2] as f32 /255f32, 
+        pixel[3] as f32 / 255f32
+    ];
 
+    pixel[0] = clamp((((1f32 - source[3]) * 255f32) + (source[3] * source[0]) * 255f32) as u8, 0, 255);
+    pixel[1] = clamp((((1f32 - source[3]) * 255f32) + (source[3] * source[1]) * 255f32) as u8, 0, 255);
+    pixel[2] = clamp((((1f32 - source[3]) * 255f32) + (source[3] * source[2]) * 255f32) as u8,0, 255);
 
+    let pixel_out: Rgb<u8> = Rgb([pixel[0], pixel[1], pixel[2]]);
+    Some(pixel_out)
+}
+
+fn tonemap(pixel: Rgb<u32>, max_lum: u32) -> Rgba<u8>
+{
+    Rgba([(pixel[0] / max_lum * 255) as u8, (pixel[1] / max_lum * 255) as u8, (pixel[2] / max_lum * 255) as u8, 255])
+}
 
 fn image_to_power(image: &DynamicImage) -> DynamicImage
 {
     let mut output_img: DynamicImage = image::DynamicImage::new(image.width(), image.height(), image::ColorType::Rgb8);
-    for img1_row in 0..image.height()
+    let max_lum = (255^2) * image.width();
+    for img1_row in 0u16..image.height() as u16
     {
         println!("1row {}", img1_row);
         let mut buffer: Vec<image::Rgb<u16>> = vec![];
-        for img2_column in 0..image.width()
+        for img2_column in 0u16..image.width() as u16
         {
             println!("  2col {}", img2_column);
-            for img1_column in 0..image.width()
+            for img1_column in 0u16..image.width() as u16
             {
                 println!("      1col {}", img1_column);
-                let colour1: Rgba<u8>  = image.get_pixel(img1_column, img1_row);
-                
-                let colour2: Rgba<u8> = image.get_pixel(img2_column, img1_column);
+                let colour1: Rgb<u8>  = match get_pix_some_none(img1_column, img1_row, image) {
+                    Some(x) => x,
+                    None => continue
+                };
+
+                let colour2: Rgb<u8>  = match get_pix_some_none(img2_column, img1_column, image) {
+                    Some(x) => x,
+                    None => continue
+                };
+                //{image.get_pixel(img1_column, img1_row)};
+                //let colour2: Rgba<u8> = image.get_pixel(img2_column, img1_column);
 
                 let colour_out: image::Rgb<u16> = Rgb([
                     (colour1[0] as u16 * colour2[0] as u16), 
@@ -84,8 +117,9 @@ fn image_to_power(image: &DynamicImage) -> DynamicImage
                     (colour1[2] as u16 * colour2[2] as u16)
                     ]);
                 
-                
-                buffer.push(colour_out);
+            
+            buffer.push(colour_out);
+            //timing_buffer.push(timing.elapsed().as_secs());
             }
 
             let pixel: Rgb<u32> = 
@@ -94,21 +128,27 @@ fn image_to_power(image: &DynamicImage) -> DynamicImage
                 .fold(
                     Rgb([0,0,0]), 
                     |acc: Rgb<u32>, colour: &Rgb<u16>| 
-                        Rgb([acc[0]+colour[0] as u32, 
+                    Rgb([
+                        acc[0]+colour[0] as u32, 
                         acc[1]+colour[1] as u32, 
-                        acc[2]+colour[2] as u32]));
+                        acc[2]+colour[2] as u32
+                    ])
+                );
+            
+            let pixel_out: Rgba<u8> = tonemap(pixel, max_lum);
 
             output_img
                 .put_pixel(
-                    img2_column,
-                    img1_row, 
-                    Rgba([pixel[0].clamp(0, 255) as u8, pixel[1].clamp(0, 255) as u8, pixel[2].clamp(0, 255) as u8, 255])
+                    img2_column as u32,
+                    img1_row as u32, 
+                    pixel_out
                 );
             buffer.clear();
-            println!("sent buffer")
+            println!("sent buffer");
         }
     }
-    return output_img
+
+    output_img
 }
 
 fn input() -> String
