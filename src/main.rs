@@ -1,10 +1,17 @@
-use std::{cmp::min, ffi::OsStr, io, path::PathBuf};
+use std::{cmp::min, ffi::OsStr, io::{self, stdin, Write}, path::PathBuf};
 use image::{self, DynamicImage, GenericImage, GenericImageView, Rgba, Rgb};
 use num::clamp;
 use rfd::FileDialog;
 
 fn main() 
 {
+    println!("Welcome to the image squarer.\nPress enter to start or '1' to open settings.");
+    let selection = input();
+    if selection.trim() == "1"
+    {settings();}
+    drop(selection);
+    
+    println!("Opening file selector dialog");
     let input_path: PathBuf = get_open_dir();
     let extension: &str = 
     input_path
@@ -13,24 +20,37 @@ fn main()
         .expect("Filename failed to parse");
 
     let mut image: DynamicImage = image::open(&input_path).expect("File failed to open");
+    println!("Image opened successfully");
 
     if image.width()!=image.height()
     {
-        print!("Image not square.");
+        //print!("Image not square.");
         make_square(&mut image);
     }
-    else { println!("Image is square");}
+    //else { println!("Image is square");}
     
-    let output_image: DynamicImage = image_to_power(&image);
+    let output_image: DynamicImage = image_to_power(image);
 
     let output_path: PathBuf = get_save_dir(&input_path, extension);
+    println!("Opening file save dialog");
     output_image.save(output_path).expect("Save failed");
+
+    println!("Press enter to close");
+    input();
 }
 
+fn settings() 
+{
+    let multithreading = "WIP";
+    let hardware_acceleration = "WIP";
+
+    println!("\nSettings:\n\nmultithreading: {}\nhardware acceleration: {}\nPress any button to exit", multithreading, hardware_acceleration);
+    input();
+}
 fn get_open_dir() -> PathBuf
 {
     FileDialog::new()
-        .add_filter("image", &["png", "jpg","jpeg"])
+        .add_filter("image", &["png", "jpg","jpeg", "webp"])
         .pick_file()
         .expect("File selection failed")
 }
@@ -85,31 +105,32 @@ fn tonemap(pixel: Rgb<u32>, max_lum: u32) -> Rgba<u8>
     Rgba([(pixel[0] / max_lum * 255) as u8, (pixel[1] / max_lum * 255) as u8, (pixel[2] / max_lum * 255) as u8, 255])
 }
 
-fn image_to_power(image: &DynamicImage) -> DynamicImage
+fn image_to_power(image: DynamicImage) -> DynamicImage
 {
+    println!("");
     let mut output_img: DynamicImage = image::DynamicImage::new(image.width(), image.height(), image::ColorType::Rgb8);
     let max_lum = (255^2) * image.width();
     for img1_row in 0u16..image.height() as u16
     {
-        println!("1row {}", img1_row);
+        //execute!(io::stdout(), terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+        print!("\rSquaring Image: row{} of {}", img1_row + 1, image.height());
+        io::stdout().flush().unwrap();
         let mut buffer: Vec<image::Rgb<u16>> = vec![];
         for img2_column in 0u16..image.width() as u16
         {
-            println!("  2col {}", img2_column);
+            //println!("  2col {}", img2_column);
             for img1_column in 0u16..image.width() as u16
             {
-                println!("      1col {}", img1_column);
-                let colour1: Rgb<u8>  = match get_pix_some_none(img1_column, img1_row, image) {
+                //println!("      1col {}", img1_column);
+                let colour1: Rgb<u8>  = match get_pix_some_none(img1_column, img1_row, &image) {
                     Some(x) => x,
                     None => continue
                 };
 
-                let colour2: Rgb<u8>  = match get_pix_some_none(img2_column, img1_column, image) {
+                let colour2: Rgb<u8>  = match get_pix_some_none(img2_column, img1_column, &image) {
                     Some(x) => x,
                     None => continue
                 };
-                //{image.get_pixel(img1_column, img1_row)};
-                //let colour2: Rgba<u8> = image.get_pixel(img2_column, img1_column);
 
                 let colour_out: image::Rgb<u16> = Rgb([
                     (colour1[0] as u16 * colour2[0] as u16), 
@@ -119,7 +140,6 @@ fn image_to_power(image: &DynamicImage) -> DynamicImage
                 
             
             buffer.push(colour_out);
-            //timing_buffer.push(timing.elapsed().as_secs());
             }
 
             let pixel: Rgb<u32> = 
@@ -144,9 +164,10 @@ fn image_to_power(image: &DynamicImage) -> DynamicImage
                     pixel_out
                 );
             buffer.clear();
-            println!("sent buffer");
+            //println!("sent buffer");
         }
     }
+    print!("\nImage Squared successfully");
 
     output_img
 }
@@ -154,6 +175,6 @@ fn image_to_power(image: &DynamicImage) -> DynamicImage
 fn input() -> String
 {
     let mut text: String = String::new();
-    io::stdin().read_line(&mut text).unwrap();
+    stdin().read_line(&mut text).unwrap();
     return text
 }
