@@ -19,7 +19,11 @@ fn main()
         .and_then(OsStr::to_str)
         .expect("Filename failed to parse");
 
-    let mut image: DynamicImage = image::open(&input_path).expect("File failed to open");
+    let mut image = image::io::Reader::open(&input_path).expect("File failed to open")
+        .with_guessed_format()
+        .expect("File failed to open")
+        .decode()
+        .expect("File failed to open");
     println!("Image opened successfully");
 
     if image.width()!=image.height()
@@ -167,7 +171,7 @@ fn image_to_power(image: DynamicImage) -> DynamicImage
             //println!("sent buffer");
         }
     }
-    print!("\nImage Squared successfully");
+    print!("\nImage Squared successfully\n");
 
     output_img
 }
